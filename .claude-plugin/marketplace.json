@@ -1,0 +1,13 @@
+{
+  "name": "cc-skill-codex-marketplace",
+  "owner": {
+    "name": "0xasun"
+  },
+  "plugins": [
+    {
+      "name": "cc-skill-codex",
+      "source": "./",
+      "description": "Invoke Codex CLI for complex coding tasks requiring high reasoning capabilities. Supports GPT-5 and GPT-5-Codex with intelligent model selection, session continuation, and safe defaults."
+    }
+  ]
+}
