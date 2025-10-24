@@ -1,6 +1,17 @@
 # Advanced Configuration Examples
 
-> **⚠️ IMPORTANT**: All examples use `codex exec` for non-interactive execution. Claude Code's bash environment is non-terminal, so the interactive `codex` command will fail. Always use `codex exec` when invoking from Claude Code.
+---
+
+## ⚠️ CRITICAL: Always Use `codex exec`
+
+**ALL commands in this document use `codex exec` - this is mandatory in Claude Code.**
+
+❌ **NEVER**: `codex -m ...` or `codex --flag ...` (will fail with "stdout is not a terminal")
+✅ **ALWAYS**: `codex exec -m ...` or `codex exec --flag ...` (correct non-interactive mode)
+
+Claude Code's bash environment is non-terminal. Plain `codex` commands will NOT work.
+
+---
 
 ## Custom Model Selection
 
@@ -370,7 +381,7 @@ codex exec -m gpt-5 --search \
 
 **Phase 2 - Design** (GPT-5 + high reasoning):
 ```bash
-codex resume --last
+codex exec resume --last
 # "Design the authentication system based on research"
 ```
 
@@ -393,13 +404,13 @@ codex exec -m gpt-5 -s read-only \
 
 **Fix** (GPT-5-Codex + workspace-write):
 ```bash
-codex resume --last
+codex exec resume --last
 # "Fix the security issues identified"
 ```
 
 **Verify** (GPT-5 + read-only):
 ```bash
-codex resume --last
+codex exec resume --last
 # "Verify the fixes are correct"
 ```
 

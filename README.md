@@ -6,6 +6,19 @@
 
 Invoke Codex CLI for complex coding tasks requiring high reasoning capabilities. Supports GPT-5 and GPT-5-Codex with intelligent model selection, session continuation, and safe defaults.
 
+---
+
+## ⚠️ CRITICAL: Always Use `codex exec`
+
+**This skill requires `codex exec` for ALL commands in Claude Code.**
+
+❌ **NEVER**: `codex -m ...` or `codex resume ...` (interactive - will fail)
+✅ **ALWAYS**: `codex exec -m ...` or `codex exec resume ...` (non-interactive - works)
+
+**Why?** Claude Code runs in a non-terminal environment. Plain `codex` commands fail with "stdout is not a terminal" error. Always use `codex exec` instead.
+
+---
+
 ## Prerequisites
 
 Before using this plugin, ensure:
@@ -81,7 +94,7 @@ Or simply try using it:
 2. Skill is invoked autonomously
 3. Codex CLI is called with gpt-5 (general high-reasoning):
    ```bash
-   codex -m gpt-5 -s read-only \
+   codex exec -m gpt-5 -s read-only \
      -c model_reasoning_effort=high \
      "Help me design a queue data structure in Python"
    ```
@@ -98,7 +111,7 @@ Or simply try using it:
 1. Skill detects code editing request
 2. Uses gpt-5-codex (optimized for coding):
    ```bash
-   codex -m gpt-5-codex -s workspace-write \
+   codex exec -m gpt-5-codex -s workspace-write \
      -c model_reasoning_effort=high \
      "Edit my Python file to implement the queue with thread-safety"
    ```
@@ -114,7 +127,7 @@ Or simply try using it:
 1. Claude detects continuation context
 2. Skill resumes previous session:
    ```bash
-   codex resume --last
+   codex exec resume --last
    ```
 3. Codex continues from previous context and adds thread-safety
 
@@ -139,7 +152,7 @@ Or simply try using it:
 
 **Skill Executes**:
 ```bash
-codex -m gpt-5-codex -s workspace-write \
+codex exec -m gpt-5-codex -s workspace-write \
   -c model_reasoning_effort=high \
   "Edit file.py to refactor the main function"
 ```
@@ -154,7 +167,7 @@ codex -m gpt-5-codex -s workspace-write \
 
 **Skill Executes**:
 ```bash
-codex -m gpt-5-codex -s workspace-write \
+codex exec -m gpt-5-codex -s workspace-write \
   -c model_reasoning_effort=high \
   "Refactor this codebase for better maintainability"
 ```
@@ -169,7 +182,7 @@ codex -m gpt-5-codex -s workspace-write \
 
 **Skill Executes**:
 ```bash
-codex -m gpt-5-codex -s read-only \
+codex exec -m gpt-5-codex -s read-only \
   -c model_reasoning_effort=high \
   --search \
   "Research latest Python async patterns and implement them"
@@ -185,7 +198,7 @@ codex -m gpt-5-codex -s read-only \
 User: "Continue where we left off"
 ```
 
-Skill automatically uses: `codex resume --last`
+Skill automatically uses: `codex exec resume --last`
 
 ### Choose from Multiple Sessions
 
@@ -193,7 +206,7 @@ If you want to resume a specific session from history:
 
 ```bash
 # Run manually (outside skill)
-codex resume
+codex exec resume --last
 ```
 
 This opens an interactive picker.
@@ -299,10 +312,10 @@ After basic usage:
 
 | Command | Purpose |
 |---------|---------|
-| `codex -m gpt-5 ...` | New session (general reasoning, default) |
-| `codex -m gpt-5-codex ...` | New session (code editing, specialized) |
-| `codex resume --last` | Continue recent session |
-| `codex resume` | Choose session (interactive) |
+| `codex exec -m gpt-5 ...` | New session (general reasoning, default) |
+| `codex exec -m gpt-5-codex ...` | New session (code editing, specialized) |
+| `codex exec resume --last` | Continue most recent session |
+| `codex exec resume <session-id>` | Resume specific session by UUID |
 | `-s read-only` | Safe mode (default) |
 | `-s workspace-write` | Allow file modifications |
 | `-c model_reasoning_effort=high` | High reasoning (default) |
@@ -310,8 +323,36 @@ After basic usage:
 
 ---
 
+## Troubleshooting
+
+### First Steps for Issues
+
+If you encounter any problems with Codex CLI or the skill:
+
+1. **Check Codex CLI built-in help**:
+   ```bash
+   codex --help
+   codex exec --help
+   codex exec resume --help
+   ```
+
+2. **Consult official Codex documentation**:
+   - GitHub Docs: [https://github.com/openai/codex/tree/main/docs](https://github.com/openai/codex/tree/main/docs)
+   - Check for latest updates and configuration options
+
+3. **Verify skill resources**:
+   - See `skills/codex/resources/codex-help.md` for CLI command reference
+   - See `skills/codex/resources/codex-config.md` for configuration options
+
+4. **Common issues**:
+   - "stdout is not a terminal" → Use `codex exec` instead of `codex`
+   - "codex: command not found" → Install Codex CLI and add to PATH
+   - "Not authenticated" → Run `codex login`
+
+---
+
 ## Support
 
 - **Skill Issues**: [GitHub Issues](https://github.com/Lucklyric/cc-skill-codex/issues)
-- **Codex CLI Docs**: See `resources/codex-help.md`
+- **Codex CLI Official Docs**: [github.com/openai/codex/tree/main/docs](https://github.com/openai/codex/tree/main/docs)
 - **Claude Code Docs**: [claude.com/claude-code](https://claude.com/claude-code)

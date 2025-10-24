@@ -1,6 +1,17 @@
 # Basic Usage Examples
 
-> **⚠️ IMPORTANT**: All examples use `codex exec` for non-interactive execution. Claude Code's bash environment is non-terminal, so the interactive `codex` command will fail with "stdout is not a terminal" error. Always use `codex exec` when invoking from Claude Code.
+---
+
+## ⚠️ CRITICAL: Always Use `codex exec`
+
+**ALL commands in this document use `codex exec` - this is mandatory in Claude Code.**
+
+❌ **NEVER**: `codex -m ...` (will fail with "stdout is not a terminal")
+✅ **ALWAYS**: `codex exec -m ...` (correct non-interactive mode)
+
+Claude Code's bash environment is non-terminal. Plain `codex` commands will NOT work.
+
+---
 
 ## Example 1: General Reasoning Task - Queue Design
 

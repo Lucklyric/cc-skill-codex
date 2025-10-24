@@ -1,6 +1,17 @@
 # Session Continuation Examples
 
-> **⚠️ IMPORTANT**: All examples use `codex exec` for non-interactive execution. Claude Code's bash environment is non-terminal, so the interactive `codex` command will fail. Always use `codex exec` when invoking from Claude Code.
+---
+
+## ⚠️ CRITICAL: Always Use `codex exec`
+
+**ALL commands in this document use `codex exec` - this is mandatory in Claude Code.**
+
+❌ **NEVER**: `codex resume ...` (will fail with "stdout is not a terminal")
+✅ **ALWAYS**: `codex exec resume ...` (correct non-interactive mode)
+
+Claude Code's bash environment is non-terminal. Plain `codex` commands will NOT work.
+
+---
 
 ## Example 1: Basic Session Continuation
 
@@ -27,7 +38,7 @@ codex exec -m gpt-5 -s read-only \
 
 **Skill Executes**:
 ```bash
-codex resume --last
+codex exec resume --last
 ```
 
 **Codex Response**: Resumes previous session, maintains context about the queue design, and adds thread-safety implementation building on the previous discussion.
@@ -56,7 +67,7 @@ codex exec -m gpt-5 -s read-only \
 
 **Skill Executes**:
 ```bash
-codex resume --last
+codex exec resume --last
 ```
 
 **Output**: Codex continues from previous API design and adds JWT/OAuth authentication strategy.
@@ -68,7 +79,7 @@ codex resume --last
 
 **Skill Executes**:
 ```bash
-codex resume --last
+codex exec resume --last
 ```
 
 **Output**: Codex builds on previous API + auth design and adds error handling patterns.
@@ -80,7 +91,7 @@ codex resume --last
 
 **Skill Executes**:
 ```bash
-codex resume --last
+codex exec resume --last
 ```
 
 **Output**: Codex uses all previous context to implement the auth endpoint with full understanding of the API design.
@@ -99,7 +110,7 @@ If you have multiple Codex sessions and want to choose which one to continue:
 
 **Manual Command** (run outside skill):
 ```bash
-codex resume
+codex exec resume --last
 ```
 
 This opens an interactive picker showing:
@@ -126,7 +137,7 @@ Select session to resume:
 
 **Skill Executes**:
 ```bash
-codex resume --last
+codex exec resume --last
 ```
 
 **Result**: Codex resumes the most recent session (the queue work) with full context maintained across Claude Code restarts.
@@ -156,15 +167,15 @@ User makes request
 │
 ├─ Contains continuation keywords?
 │  │
-│  ├─ YES → Use `codex resume --last`
+│  ├─ YES → Use `codex exec resume --last`
 │  │
 │  └─ NO → Check context
 │     │
 │     ├─ References previous Codex work?
 │     │  │
-│     │  ├─ YES → Use `codex resume --last`
+│     │  ├─ YES → Use `codex exec resume --last`
 │     │  │
-│     │  └─ NO → New session: `codex -m ... "prompt"`
+│     │  └─ NO → New session: `codex exec -m ... "prompt"`
 │
 └─ User explicitly says "new" or "fresh"?
    │
@@ -186,10 +197,10 @@ User makes request
 ### Accessing History
 ```bash
 # Resume most recent (recommended for skill)
-codex resume --last
+codex exec resume --last
 
 # Interactive picker (manual use)
-codex resume
+codex exec resume --last
 
 # List sessions (manual use)
 codex list
@@ -254,7 +265,7 @@ Then subsequent "continue" requests will work.
 
 **Fix**: Use interactive picker to select correct session:
 ```bash
-codex resume
+codex exec resume --last
 ```
 
 ---
@@ -265,7 +276,7 @@ codex resume
 
 **Solution**:
 1. Be explicit: "Resume the queue design session" (skill will use --last)
-2. Or manually: `codex resume` → pick correct session
+2. Or manually: `codex exec resume --last` (or `codex exec resume <session-id>`) → pick correct session
 
 ---
 

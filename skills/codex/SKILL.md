@@ -5,6 +5,25 @@ description: Invoke Codex CLI for complex coding tasks requiring high reasoning 
 
 # cc-skill-codex: Codex CLI Integration for Claude Code
 
+---
+
+## ⚠️ CRITICAL: Always Use `codex exec`
+
+**MUST USE**: `codex exec` for ALL Codex CLI invocations in Claude Code.
+
+❌ **NEVER USE**: `codex` (interactive mode) - will fail with "stdout is not a terminal"
+✅ **ALWAYS USE**: `codex exec` (non-interactive mode)
+
+**Examples:**
+- ✅ `codex exec -m gpt-5 "prompt"` (CORRECT)
+- ❌ `codex -m gpt-5 "prompt"` (WRONG - will fail)
+- ✅ `codex exec resume --last` (CORRECT)
+- ❌ `codex resume --last` (WRONG - will fail)
+
+**Why?** Claude Code's bash environment is non-terminal/non-interactive. Only `codex exec` works in this environment.
+
+---
+
 ## When to Use This Skill
 
 This skill should be invoked when:
@@ -118,27 +137,29 @@ For continuation requests, use the `codex resume` command:
 #### Resume Most Recent Session (Recommended)
 
 ```bash
-codex resume --last
+codex exec resume --last
 ```
 
 This automatically continues the most recent Codex session with all previous context maintained.
 
-#### Interactive Session Picker
+#### Resume Specific Session
 
 ```bash
-codex resume
+codex exec resume <session-id>
 ```
 
-Opens an interactive picker when multiple sessions exist. User can select which session to continue.
+Resume a specific session by providing its UUID. Get session IDs from previous Codex output or by running `codex exec resume --last` to see the most recent session.
+
+**Note**: The interactive session picker (`codex resume` without arguments) is NOT available in non-interactive/Claude Code environments. Always use `--last` or provide explicit session ID.
 
 ### Decision Logic: New vs. Continue
 
-**Use `codex -m ... "<prompt>"`** when:
+**Use `codex exec -m ... "<prompt>"`** when:
 - User makes a new, independent request
 - No reference to previous Codex work
 - User explicitly wants a "fresh" or "new" session
 
-**Use `codex resume --last`** when:
+**Use `codex exec resume --last`** when:
 - User indicates continuation ("continue", "resume", "add to that")
 - Follow-up question building on previous Codex conversation
 - Iterative development on same task
@@ -148,7 +169,8 @@ Opens an interactive picker when multiple sessions exist. User can select which 
 - Codex CLI automatically saves session history
 - No manual session ID tracking needed
 - Sessions persist across Claude Code restarts
-- Use `codex resume` to access session history
+- Use `codex exec resume --last` to access most recent session
+- Use `codex exec resume <session-id>` for specific sessions
 
 ## Error Handling
 
@@ -194,10 +216,15 @@ Error: Invalid model specified
 
 To fix: Use 'gpt-5' for general reasoning or 'gpt-5-codex' for code editing
 
-Example: codex -m gpt-5 "your prompt here"
+Example: codex exec -m gpt-5 "your prompt here"
 ```
 
 ### Troubleshooting
+
+**First Steps for Any Issues:**
+1. Check Codex CLI built-in help: `codex --help`, `codex exec --help`, `codex exec resume --help`
+2. Consult official documentation: [https://github.com/openai/codex/tree/main/docs](https://github.com/openai/codex/tree/main/docs)
+3. Verify skill resources in `resources/` directory
 
 **Skill not being invoked?**
 - Check that request matches trigger keywords (Codex, complex coding, high reasoning, etc.)
@@ -205,14 +232,19 @@ Example: codex -m gpt-5 "your prompt here"
 - Try: "Use Codex to help me with..."
 
 **Session not resuming?**
-- Verify you have a previous Codex session: `codex resume` (run outside skill)
-- Check if Codex CLI has saved session history
+- Verify you have a previous Codex session (check command output for session IDs)
+- Try: `codex exec resume --last` to resume most recent session
 - If no history exists, start a new session first
+
+**"stdout is not a terminal" error?**
+- Always use `codex exec` instead of plain `codex` in Claude Code
+- Claude Code's bash environment is non-interactive/non-terminal
 
 **Errors during execution?**
 - Codex CLI errors are passed through directly
 - Check Codex CLI logs for detailed diagnostics
 - Verify working directory permissions if using workspace-write
+- Check official Codex docs for latest updates and known issues
 
 ## Examples
 
@@ -252,7 +284,7 @@ codex exec -m gpt-5-codex -s workspace-write \
 
 **Skill Executes**:
 ```bash
-codex resume --last
+codex exec resume --last
 ```
 
 **Result**: Codex resumes the previous BST session and continues with deletion method implementation, maintaining full context.
