@@ -1,5 +1,5 @@
 ---
-name: cc-skill-codex
+name: codex
 description: Invoke Codex CLI for complex coding tasks requiring high reasoning capabilities. Use when user asks to use Codex, work with Codex, mentions Codex in any context, requests complex implementation challenges, advanced reasoning, GPT-5 capabilities, or needs high-reasoning model assistance. Always trigger when user says "codex", "use codex", "work with codex", "ask codex", or any codex-related request. Supports session continuation for iterative development.
 ---
 
@@ -103,6 +103,8 @@ All Codex invocations use these defaults unless user specifies otherwise:
 
 ### CLI Flags Reference
 
+**Codex CLI Version**: 0.48.0
+
 | Flag | Values | Description |
 |------|--------|-------------|
 | `-m, --model` | `gpt-5`, `gpt-5-codex` | Model selection |
@@ -110,8 +112,13 @@ All Codex invocations use these defaults unless user specifies otherwise:
 | `-c, --config` | `key=value` | Config overrides (reasoning_effort, verbosity, etc.) |
 | `-C, --cd` | directory path | Working directory |
 | `-p, --profile` | profile name | Use config profile |
-| `-a, --approval-policy` | `untrusted`, `on-failure`, `on-request`, `never` | Approval behavior |
+| `-a, --ask-for-approval` | `untrusted`, `on-failure`, `on-request`, `never` | Approval behavior |
 | `--search` | flag | Enable web search |
+| `--full-auto` | flag | Convenience for `-a on-failure --sandbox workspace-write` |
+| `--oss` | flag | Use local open source model provider |
+| `--json` | flag | Output events as JSONL (exec mode) |
+| `-o, --output-last-message` | file path | Save last message to file (exec mode) |
+| `--add-dir` | directory path | Additional writable directories |
 
 ### Configuration Parameters
 

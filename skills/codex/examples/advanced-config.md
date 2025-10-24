@@ -330,7 +330,7 @@ approval_policy = "on-request"
 
 **Skill Executes**:
 ```bash
-codex -p review "Analyze this code"
+codex exec -p review "Analyze this code"
 ```
 
 **Result**: Uses all settings from `[profiles.review]`.

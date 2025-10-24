@@ -3,6 +3,7 @@
 **Version**: 1.0.0
 **Plugin Type**: Skill
 **License**: Apache 2.0
+**Codex CLI Version**: 0.48.0
 
 Invoke Codex CLI for complex coding tasks requiring high reasoning capabilities. Supports GPT-5 and GPT-5-Codex with intelligent model selection, session continuation, and safe defaults.
 
