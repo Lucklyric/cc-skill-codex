@@ -15,7 +15,7 @@ This marketplace provides Claude Code plugins for enhanced development capabilit
 | [Telegram Notifier](#telegram-notifier-plugin) | Telegram notifications for Claude Code events | Hooks |
 
 > **Moved (v3.0.0):** the `codex` and `tmux` plugins migrated to the
-> [super-tmux marketplace](https://github.com/Lucklyric/tmux-agent) as the
+> [super-tmux marketplace](https://github.com/Lucklyric/super-tmux) as the
 > `tmux-agent` and `tmux-core` plugins — see [Migration](#migration-codex--tmux--super-tmux).
 
 ---
@@ -128,13 +128,13 @@ export CC_TELEGRAM_CHAT_ID="your-chat-id"
 ## Migration: codex + tmux → super-tmux
 
 As of marketplace **3.0.0** the `codex` and `tmux` plugins live in the
-[super-tmux marketplace](https://github.com/Lucklyric/tmux-agent) (engine + kind
+[super-tmux marketplace](https://github.com/Lucklyric/super-tmux) (engine + kind
 profiles + layered skills, both plugins at 1.0.0). One-time reinstall per machine:
 
 ```bash
 /plugin uninstall codex
 /plugin uninstall tmux
-/plugin marketplace add Lucklyric/tmux-agent
+/plugin marketplace add Lucklyric/super-tmux
 /plugin install tmux-agent@super-tmux   # tmux-core auto-installs as a dependency
 ```
 
