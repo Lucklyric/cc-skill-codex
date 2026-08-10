@@ -1,7 +1,7 @@
 {
   "name": "codex",
   "description": "Invoke Codex CLI for complex coding tasks requiring high reasoning capabilities. Triggers whenever the user names codex as the actor for any task (use/ask/run/call/have/let/delegate to codex, 'codex cli', 'GPT-5 reasoning', 'OpenAI reasoning'); a UserPromptSubmit hook deterministically nudges the codex skill to load whenever a prompt mentions codex. Supports intelligent model selection, session continuation, and safe defaults.",
-  "version": "3.10.0",
+  "version": "3.11.0",
   "dependencies": ["tmux"],
   "author": {
     "name": "0xasun"
