@@ -32,6 +32,15 @@ init_globals() {
     # Env-var prefix shown in user-facing messages (the kind wrapper's legacy
     # names, e.g. CC_CODEX — the vars users actually set).
     ENV_PREFIX="${PROFILE_ENV_PREFIX:-CC_AGENT}"
+    # Input-ready detection for the driving verbs (`wait`, `prompt --wait`):
+    # a regex matched against the BOTTOM of the pane (last 3 lines). Empty →
+    # stability-only detection (more consecutive unchanged polls required).
+    IDLE_REGEX="${CC_AGENT_IDLE_REGEX:-${PROFILE_IDLE_REGEX:-}}"
+    # Busy detection (the inverse): while this regex matches the last 15 pane
+    # lines the turn is still running, whatever else looks stable. For TUIs
+    # whose idle footer is user-configurable (Claude Code statuslines), a
+    # universal busy marker ("esc to interrupt") beats any idle marker.
+    BUSY_REGEX="${CC_AGENT_BUSY_REGEX:-${PROFILE_BUSY_REGEX:-}}"
     readonly SESSION_NAME="${CC_AGENT_SESSION_NAME:-cc-$KIND}"
     readonly AGENT_BIN="${CC_AGENT_BIN:-${PROFILE_BIN_DEFAULT:-$KIND}}"
     # How the pane/window behaves when its ROOT process exits. With keep-shell
@@ -667,10 +676,11 @@ cmd_panes() {
     #   <pane_id>\t<topic>\t<state>\t<session:window_index>\t<cwd>
     # (state = alive|shell|dead). Exits 0 if anything was printed, 1 otherwise.
     # Never creates the shared session (ensure_tmux_or_die only).
-    local all=0
+    local all=0 json=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --all) all=1; shift ;;
+            --json) json=1; shift ;;
             *) echo "$LABEL panes: unknown arg '$1'" >&2; return 2 ;;
         esac
     done
@@ -685,7 +695,7 @@ cmd_panes() {
     # panes and are skipped.
     local fmt
     fmt="#{pane_id}"$'\t'"#{?@${OPT_PREFIX}_claude6,#{@${OPT_PREFIX}_claude6},-}"$'\t'"#{?@${OPT_PREFIX}_topic,#{@${OPT_PREFIX}_topic},main}"$'\t'"#{pane_dead}"$'\t'"#{pane_pid}"$'\t'"#{?@${OPT_PREFIX}_bin,#{@${OPT_PREFIX}_bin},-}"$'\t'"#{session_name}:#{window_index}"$'\t'"#{?@${OPT_PREFIX}_cwd,#{@${OPT_PREFIX}_cwd},-}"
-    local found=0
+    local found=0 rows=""
     local pid mark topic dead ppid bin win cwd state
     while IFS=$'\t' read -r pid mark topic dead ppid bin win cwd; do
         [[ "$mark" == "-" ]] && continue
@@ -694,10 +704,17 @@ cmd_panes() {
         if [[ "$dead" != "1" ]]; then
             if agent_running_under "$ppid" "$bin"; then state="alive"; else state="shell"; fi
         fi
-        printf '%s\t%s\t%s\t%s\t%s\n' "$pid" "$topic" "$state" "$win" "$cwd"
+        if (( json )); then
+            rows+="$(printf '{"pane_id":"%s","topic":"%s","state":"%s","window":"%s","cwd":"%s"}' \
+                "$(json_escape "$pid")" "$(json_escape "$topic")" "$(json_escape "$state")" \
+                "$(json_escape "$win")" "$(json_escape "$cwd")"),"
+        else
+            printf '%s\t%s\t%s\t%s\t%s\n' "$pid" "$topic" "$state" "$win" "$cwd"
+        fi
         found=$(( found + 1 ))
     done < <(tmux list-panes -a -F "$fmt" 2>/dev/null)
 
+    (( json )) && printf '[%s]\n' "${rows%,}"
     (( found > 0 ))
 }
 
@@ -739,12 +756,14 @@ cmd_find() {
     local cwd_filter=""
     local include_dead=0
     local any_session=0
+    local json=0
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --cwd) cwd_filter="$2"; shift 2 ;;
             --include-dead) include_dead=1; shift ;;
             --any-session) any_session=1; shift ;;
+            --json) json=1; shift ;;
             -*) echo "$LABEL find: unknown flag '$1'" >&2; return 2 ;;
             *) topic="$1"; shift ;;
         esac
@@ -759,7 +778,7 @@ cmd_find() {
     local my_token=""
     (( any_session )) || my_token="$(compute_claude6)"
 
-    local found=0
+    local found=0 rows=""
     while IFS= read -r win; do
         [[ "$win" == "_placeholder" ]] && continue
         [[ "$win" != "$WIN_PREFIX"-* ]] && continue
@@ -782,10 +801,16 @@ cmd_find() {
         if (( ! include_dead )) && [[ "$state" != "alive" ]]; then
             continue
         fi
-        printf '%s\t%s\t%s\n' "$win" "$state" "${win_cwd:--}"
+        if (( json )); then
+            rows+="$(printf '{"window":"%s","state":"%s","cwd":"%s"}' \
+                "$(json_escape "$win")" "$(json_escape "$state")" "$(json_escape "${win_cwd:--}")"),"
+        else
+            printf '%s\t%s\t%s\n' "$win" "$state" "${win_cwd:--}"
+        fi
         found=$(( found + 1 ))
     done < <(tmux list-windows -t "$SESSION_NAME" -F '#{window_name}' 2>/dev/null)
 
+    (( json )) && printf '[%s]\n' "${rows%,}"
     (( found > 0 ))
 }
 
@@ -926,6 +951,311 @@ cmd_kill() {
     tmux kill-window -t "$SESSION_NAME:$window"
 }
 
+# ---------- Driving verbs (send → wait → read → cancel) ----------
+
+# Normalize a drive target: %pane-id and session:window pass through; a bare
+# window name gets the shared session prefixed.
+norm_target() {
+    local t="$1"
+    if [[ "$t" == %* || "$t" == *:* ]]; then printf '%s' "$t"; else printf '%s:%s' "$SESSION_NAME" "$t"; fi
+}
+
+# State of a drive target regardless of placement: pane targets via
+# pane_agent_state, window targets via window_state (name part only).
+target_state() {
+    local t="$1"
+    if [[ "$t" == %* ]]; then pane_agent_state "$t"; else window_state "${t##*:}"; fi
+}
+
+# Resolve the target for a driving verb: --target wins; otherwise THIS Claude
+# session's pane for the topic (default main), found server-wide. Prints the
+# normalized target; returns 1 when nothing was found.
+resolve_drive_target() {
+    local explicit="${1:-}" topic="${2:-main}"
+    if [[ -n "$explicit" ]]; then
+        norm_target "$explicit"
+        return 0
+    fi
+    local match
+    if match="$(find_agent_pane "$(compute_claude6)" "$topic")"; then
+        printf '%s' "${match%%$'\t'*}"
+        return 0
+    fi
+    return 1
+}
+
+capture_full() { tmux capture-pane -t "$1" -p -S - 2>/dev/null; }
+
+buf_hash() { printf '%s' "$1" | cksum; }
+
+# Escape a string for inclusion in a JSON double-quoted value.
+json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+# Shared settled-state wait. Args: target timeout activity_timeout.
+# Uses the @<opt>_basehash recorded by `prompt` for the activity phase (skipped
+# when absent — a standalone `wait` just asks "is it idle now?"), then requires
+# the buffer stable over consecutive polls AND the idle regex at the bottom of
+# the pane. Exit: 0 idle, 5 timeout, 8 stalled (no activity), 9 agent exited.
+wait_impl() {
+    local target="$1" timeout="$2" activity_timeout="$3"
+    local basehash buf state
+    basehash="$(tmux show-option -p -qv -t "$target" "@${OPT_PREFIX}_basehash" 2>/dev/null || true)"
+
+    local deadline
+    if [[ -n "$basehash" ]]; then
+        # Activity phase: the pane must first CHANGE from the prompt-time
+        # baseline, else the pre-send idle line reads as a false "done".
+        deadline=$(( $(date +%s) + activity_timeout ))
+        while :; do
+            state="$(target_state "$target")"
+            case "$state" in
+                gone|unknown) echo "$LABEL wait: target '$target' not found" >&2; return 6 ;;
+                shell|dead) echo "$LABEL wait: $KIND exited (state $state)" >&2; return 9 ;;
+            esac
+            buf="$(capture_full "$target")"
+            [[ "$(buf_hash "$buf")" != "$basehash" ]] && break
+            if (( $(date +%s) >= deadline )); then
+                echo "$LABEL wait: stalled — no activity within ${activity_timeout}s of the prompt" >&2
+                return 8
+            fi
+            sleep 0.5
+        done
+    fi
+
+    # Stability + idle phase. Matched against only the BOTTOM of the pane so a
+    # response echoing the idle marker mid-buffer can't trigger a false idle.
+    local prev="" stable=0 need=2
+    [[ -z "$IDLE_REGEX" ]] && need=4
+    deadline=$(( $(date +%s) + timeout ))
+    while (( $(date +%s) < deadline )); do
+        state="$(target_state "$target")"
+        case "$state" in
+            gone|unknown) echo "$LABEL wait: target '$target' not found" >&2; return 6 ;;
+            shell|dead) echo "$LABEL wait: $KIND exited (state $state)" >&2; return 9 ;;
+        esac
+        buf="$(tmux capture-pane -t "$target" -p -S -200 2>/dev/null || true)"
+        if [[ -n "$BUSY_REGEX" ]] && printf '%s\n' "$buf" | tail -15 | grep -qE "$BUSY_REGEX"; then
+            # Busy marker on screen: the turn is still running even if the
+            # buffer looks momentarily stable.
+            stable=0
+        elif [[ -n "$buf" && "$buf" == "$prev" ]]; then
+            if [[ -z "$IDLE_REGEX" ]] || printf '%s\n' "$buf" | tail -3 | grep -qE "$IDLE_REGEX"; then
+                stable=$(( stable + 1 ))
+                if (( stable >= need )); then
+                    tmux set-option -p -u -t "$target" "@${OPT_PREFIX}_basehash" 2>/dev/null || true
+                    echo "idle"
+                    return 0
+                fi
+            else
+                stable=0
+            fi
+        else
+            stable=0
+        fi
+        prev="$buf"
+        sleep 0.5
+    done
+    echo "$LABEL wait: timeout after ${timeout}s (agent still busy or idle marker never matched)" >&2
+    return 5
+}
+
+cmd_prompt() {
+    # Type a prompt into the agent pane: literal send-keys, short pause, then
+    # Enter as its own key event. Records a baseline (line count + hash) as
+    # pane options so `read --delta` and `wait` anchor to this prompt. Long or
+    # multi-line text goes via a tmp file the agent is pointed at.
+    local target="" topic="main" file="" do_wait=0 timeout=600 activity_timeout=30
+    local -a words=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --target) target="$2"; shift 2 ;;
+            --topic) topic="$2"; shift 2 ;;
+            --file) file="$2"; shift 2 ;;
+            --wait) do_wait=1; shift ;;
+            --timeout) timeout="$2"; shift 2 ;;
+            --activity-timeout) activity_timeout="$2"; shift 2 ;;
+            --) shift; words+=( "$@" ); break ;;
+            -*) echo "$LABEL prompt: unknown flag '$1'" >&2; return 2 ;;
+            *) words+=( "$1" ); shift ;;
+        esac
+    done
+    if [[ ! "$timeout" =~ ^[0-9]+$ || ! "$activity_timeout" =~ ^[0-9]+$ ]]; then
+        echo "$LABEL prompt: --timeout/--activity-timeout must be integers (seconds)" >&2
+        return 2
+    fi
+    local text="${words[*]:-}"
+    if [[ -n "$file" && -n "$text" ]] || [[ -z "$file" && -z "$text" ]]; then
+        echo "$LABEL prompt: exactly one of <text> or --file PATH required" >&2
+        return 2
+    fi
+    if [[ -n "$file" && ! -f "$file" ]]; then
+        echo "$LABEL prompt: file '$file' not found" >&2
+        return 2
+    fi
+    ensure_tmux_or_die
+
+    local t
+    t="$(resolve_drive_target "$target" "$topic")" \
+        || { echo "$LABEL prompt: no $KIND pane for topic '$topic' — run 'pane' first" >&2; return 6; }
+    local state
+    state="$(target_state "$t")"
+    case "$state" in
+        alive) : ;;
+        gone|unknown) echo "$LABEL prompt: target '$t' not found" >&2; return 6 ;;
+        *) echo "$LABEL prompt: target '$t' is not alive (state $state) — run 'pane'/'bind' to relaunch" >&2; return 9 ;;
+    esac
+
+    local msg
+    if [[ -n "$file" ]]; then
+        msg="Read @$file and follow its instructions."
+    elif [[ "$text" == *$'\n'* || "${#text}" -gt 500 ]]; then
+        # Multi-line / long prompt: hand it over via a tmp file to avoid
+        # quoting and TUI paste issues.
+        local tmpf
+        tmpf="$(mktemp "${TMPDIR:-/tmp}/cc-${KIND}-prompt.XXXXXX")" || return 1
+        printf '%s\n' "$text" > "$tmpf"
+        msg="Read @$tmpf and follow its instructions."
+    else
+        msg="$text"
+    fi
+
+    # Baseline BEFORE sending: anchor for wait's activity phase and read's
+    # delta. The full text also goes to a baseline file — TUIs that pad/redraw
+    # the whole screen (Claude Code) never grow the line count within one
+    # screen, so `read --delta` falls back to a first-divergence diff against
+    # this file when the line-count tail comes up empty.
+    local buf hash lines basefile
+    buf="$(capture_full "$t")"
+    hash="$(buf_hash "$buf")"
+    lines="$(printf '%s\n' "$buf" | wc -l | tr -d ' ')"
+    basefile="${TMPDIR:-/tmp}/cc-${KIND}-base-${t//[%:.]/_}"
+    printf '%s\n' "$buf" > "$basefile" 2>/dev/null || basefile=""
+    tmux set-option -p -t "$t" "@${OPT_PREFIX}_mark" "$lines" 2>/dev/null || true
+    tmux set-option -p -t "$t" "@${OPT_PREFIX}_basehash" "$hash" 2>/dev/null || true
+    [[ -n "$basefile" ]] && tmux set-option -p -t "$t" "@${OPT_PREFIX}_basefile" "$basefile" 2>/dev/null || true
+
+    tmux send-keys -t "$t" -l -- "$msg" 2>/dev/null \
+        || { echo "$LABEL prompt: send-keys to '$t' failed" >&2; return 6; }
+    sleep 0.3
+    tmux send-keys -t "$t" Enter 2>/dev/null || { echo "$LABEL prompt: send-keys to '$t' failed" >&2; return 6; }
+
+    if (( do_wait )); then
+        wait_impl "$t" "$timeout" "$activity_timeout"
+        return
+    fi
+    echo "sent to $t"
+}
+
+cmd_wait() {
+    # Block until the agent's turn settles (idle marker + stable pane).
+    # Standalone `wait` (no prior prompt baseline) just answers "is it idle
+    # now?" — the activity phase only runs against a `prompt`-recorded baseline.
+    local target="" topic="main" timeout=600 activity_timeout=30
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --target) target="$2"; shift 2 ;;
+            --topic) topic="$2"; shift 2 ;;
+            --timeout) timeout="$2"; shift 2 ;;
+            --activity-timeout) activity_timeout="$2"; shift 2 ;;
+            *) echo "$LABEL wait: unknown arg '$1'" >&2; return 2 ;;
+        esac
+    done
+    if [[ ! "$timeout" =~ ^[0-9]+$ || ! "$activity_timeout" =~ ^[0-9]+$ ]]; then
+        echo "$LABEL wait: --timeout/--activity-timeout must be integers (seconds)" >&2
+        return 2
+    fi
+    ensure_tmux_or_die
+    local t
+    t="$(resolve_drive_target "$target" "$topic")" \
+        || { echo "$LABEL wait: no $KIND pane for topic '$topic'" >&2; return 6; }
+    wait_impl "$t" "$timeout" "$activity_timeout"
+}
+
+cmd_read() {
+    # Read the pane. --delta prints only what the agent emitted since the last
+    # `prompt` (line-count tail against the recorded baseline — robust on
+    # redraw-heavy TUIs); the default prints the last --lines of scrollback.
+    # Works on shell/dead panes too (their scrollback is still readable).
+    local target="" topic="main" delta=0 lines=200
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --target) target="$2"; shift 2 ;;
+            --topic) topic="$2"; shift 2 ;;
+            --delta) delta=1; shift ;;
+            --lines) lines="$2"; shift 2 ;;
+            *) echo "$LABEL read: unknown arg '$1'" >&2; return 2 ;;
+        esac
+    done
+    if [[ ! "$lines" =~ ^[0-9]+$ ]]; then
+        echo "$LABEL read: --lines must be an integer" >&2
+        return 2
+    fi
+    ensure_tmux_or_die
+    local t
+    t="$(resolve_drive_target "$target" "$topic")" \
+        || { echo "$LABEL read: no $KIND pane for topic '$topic'" >&2; return 6; }
+    local state
+    state="$(target_state "$t")"
+    if [[ "$state" == "gone" || "$state" == "unknown" ]]; then
+        echo "$LABEL read: target '$t' not found" >&2
+        return 6
+    fi
+
+    if (( delta )); then
+        local buf mark total basefile
+        buf="$(capture_full "$t")"
+        mark="$(tmux show-option -p -qv -t "$t" "@${OPT_PREFIX}_mark" 2>/dev/null || true)"
+        [[ "$mark" =~ ^[0-9]+$ ]] || mark=0
+        total="$(printf '%s\n' "$buf" | wc -l | tr -d ' ')"
+        if (( total > mark )); then
+            # Growing-buffer TUI (codex, plain CLIs): everything after the
+            # prompt-time line count is new output.
+            printf '%s\n' "$buf" | tail -n "$(( total - mark ))"
+            return 0
+        fi
+        # Screen-padding TUI (Claude Code): the buffer redraws in place, so
+        # print from the first line that DIFFERS from the prompt-time
+        # baseline, trailing blank lines trimmed.
+        basefile="$(tmux show-option -p -qv -t "$t" "@${OPT_PREFIX}_basefile" 2>/dev/null || true)"
+        if [[ -n "$basefile" && -r "$basefile" ]]; then
+            printf '%s\n' "$buf" \
+                | awk 'NR==FNR { base[NR]=$0; next }
+                       started { print; next }
+                       !(FNR in base) || $0 != base[FNR] { started=1; print }' \
+                    "$basefile" - \
+                | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}'
+        fi
+        return 0
+    fi
+    tmux capture-pane -t "$t" -p -S "-$lines" 2>/dev/null
+}
+
+cmd_cancel() {
+    # Cancel the in-flight turn (agent TUIs bind Esc to cancel), then the
+    # caller re-runs `wait` before sending anything else.
+    local target="" topic="main"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --target) target="$2"; shift 2 ;;
+            --topic) topic="$2"; shift 2 ;;
+            *) echo "$LABEL cancel: unknown arg '$1'" >&2; return 2 ;;
+        esac
+    done
+    ensure_tmux_or_die
+    local t
+    t="$(resolve_drive_target "$target" "$topic")" \
+        || { echo "$LABEL cancel: no $KIND pane for topic '$topic'" >&2; return 6; }
+    tmux send-keys -t "$t" Escape 2>/dev/null \
+        || { echo "$LABEL cancel: target '$t' not found" >&2; return 6; }
+    echo "cancel sent to $t"
+}
+
 # ---------- Usage ----------
 usage() {
     cat <<EOF
@@ -940,11 +1270,27 @@ kind-only verbs.
 Subcommands (identical semantics to the codex wrapper's documentation):
   pane [--topic SLUG] [--cwd DIR] [--full-auto|--read-only]
        [--horizontal|--vertical] [--size PCT]
-  panes [--all]
+  panes [--all] [--json]
   bind [--cwd DIR] [--full-auto|--read-only]
   new <topic> [--cwd DIR] [--full-auto|--read-only]
+  prompt [--target T|--topic SLUG] [--file PATH] [--wait] [--timeout SECS]
+         [--activity-timeout SECS] [--] <text...>
+      Type a prompt into the agent pane (literal send-keys, pause, Enter).
+      Long/multi-line text goes via a tmp file automatically. Records the
+      baseline that 'wait' and 'read --delta' anchor to. --wait chains
+      straight into 'wait'. Default target: this session's main-topic pane.
+  wait [--target T|--topic SLUG] [--timeout SECS] [--activity-timeout SECS]
+      Block until the turn settles: after a 'prompt', first requires pane
+      activity (else exit 8, stalled), then stability + the profile's idle
+      regex at the pane bottom. Standalone = "is it idle now?". Prints
+      "idle" and exits 0; 5 = timeout, 6 = no target, 9 = agent exited.
+  read [--target T|--topic SLUG] [--delta] [--lines N]
+      Print the pane. --delta = only output since the last 'prompt'
+      (works on kept-shell/dead panes too); default = last N (200) lines.
+  cancel [--target T|--topic SLUG]
+      Send Escape to cancel the in-flight turn; re-run 'wait' after.
   ls [--mine]
-  find <topic> [--cwd DIR] [--include-dead] [--any-session]
+  find <topic> [--cwd DIR] [--include-dead] [--any-session] [--json]
   attach <window>
   rename <old-window> <new-topic>
   kill <window> | kill <%pane-id> | kill --mine | kill --orphaned
@@ -959,6 +1305,10 @@ Environment (generic; kind wrappers map their legacy names onto these):
   CC_AGENT_EXIT_SHELL     (default: \$SHELL)
   CC_AGENT_REMAIN_ON_EXIT (default: failed)
   CC_AGENT_REF_PANE       (default: \$TMUX_PANE)
+  CC_AGENT_IDLE_REGEX     (default: profile's idle regex; matched against the
+                          bottom 3 pane lines by 'wait'. Empty = stability-only)
+  CC_AGENT_BUSY_REGEX     (default: profile's busy regex; while it matches the
+                          bottom 15 lines, 'wait' treats the turn as running)
 EOF
 }
 
@@ -1007,6 +1357,10 @@ main() {
         panes) cmd_panes "$@" ;;
         bind) cmd_bind "$@" ;;
         new) cmd_new "$@" ;;
+        prompt) cmd_prompt "$@" ;;
+        wait) cmd_wait "$@" ;;
+        read) cmd_read "$@" ;;
+        cancel) cmd_cancel "$@" ;;
         ls) cmd_ls "$@" ;;
         find) cmd_find "$@" ;;
         attach) cmd_attach "$@" ;;

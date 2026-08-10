@@ -29,7 +29,7 @@ readonly CODEX_EFFORT="${CC_CODEX_EFFORT:-$PROFILE_EFFORT_DEFAULT}"
 # ever read CC_CODEX_*.
 map_env() {
     local pair legacy generic
-    for pair in SESSION_NAME BIN MODEL EFFORT KEEP_SHELL EXIT_SHELL REMAIN_ON_EXIT REF_PANE; do
+    for pair in SESSION_NAME BIN MODEL EFFORT KEEP_SHELL EXIT_SHELL REMAIN_ON_EXIT REF_PANE IDLE_REGEX BUSY_REGEX; do
         legacy="CC_CODEX_$pair"
         generic="CC_AGENT_$pair"
         if [[ -n "${!legacy+x}" ]]; then
@@ -106,6 +106,29 @@ Subcommands:
       panes via `pane --topic`), with `bind` as the outside-tmux fallback.
       Prints the full window name on stdout plus an attach hint.
 
+  prompt [--target T|--topic SLUG] [--file PATH] [--wait] [--timeout SECS] [--] <text...>
+      Type a prompt into the codex pane: literal send-keys, short pause, then
+      Enter as its own key event. Long or multi-line text is handed over via
+      a tmp file automatically ("Read @file ..."). Records the baseline that
+      `wait` and `read --delta` anchor to. --wait chains straight into `wait`.
+      Default target: this session's main-topic pane (override with --target
+      %pane-id/window or --topic SLUG).
+
+  wait [--target T|--topic SLUG] [--timeout SECS] [--activity-timeout SECS]
+      Block until codex's turn settles: after a `prompt`, first requires pane
+      activity (exit 8 = stalled if none), then a stable pane showing the
+      idle status line (gpt-5.x · path) at the bottom. Standalone `wait`
+      answers "is it idle now?". Prints "idle", exit 0; 5 = timeout,
+      6 = no target, 9 = codex exited (kept shell).
+
+  read [--target T|--topic SLUG] [--delta] [--lines N]
+      Print the pane. --delta = only what codex emitted since the last
+      `prompt` (line-count tail; works on kept-shell panes too);
+      default = the last N (200) lines of scrollback.
+
+  cancel [--target T|--topic SLUG]
+      Send Escape to cancel the in-flight turn; re-run `wait` afterwards.
+
   send | capture
       Removed in v3.1.0 — see references/tmux-mode.md for the skill recipes
       that replace them.
@@ -149,6 +172,8 @@ Environment:
   CC_CODEX_REMAIN_ON_EXIT (default: failed; governs the pane's ROOT process —
                           the kept shell under keep-shell, codex itself with
                           CC_CODEX_KEEP_SHELL=0)
+  CC_CODEX_IDLE_REGEX     (default: the profile's model-agnostic status-line
+                          regex; used by `wait`/`prompt --wait`)
   Model/effort/sandbox bind when codex STARTS; overrides on a live reuse warn
   on stderr instead of applying (they DO apply when the kept shell relaunches
   codex, since that is a fresh start).
@@ -169,7 +194,7 @@ main() {
         -h|--help|help)
             usage
             ;;
-        pane|panes|bind|new|ls|find|attach|rename|kill|_internal)
+        pane|panes|bind|new|prompt|wait|read|cancel|ls|find|attach|rename|kill|_internal)
             map_env
             exec "$SCRIPT_DIR/agent-tmux.sh" --kind codex "$subcmd" "$@"
             ;;
