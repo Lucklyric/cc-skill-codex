@@ -1,16 +1,11 @@
 {
   "name": "cc-dev-tools",
   "description": "Claude Code marketplace containing development tools and AI integrations for advanced workflows",
-  "version": "2.35.0",
+  "version": "3.0.0",
   "owner": {
     "name": "0xasun"
   },
   "plugins": [
-    {
-      "name": "codex",
-      "source": "./plugins/codex",
-      "description": "Invoke Codex CLI for complex coding tasks requiring high reasoning capabilities. Triggers whenever the user names codex as the actor for any task (use/ask/run/call/have/let/delegate to codex, 'codex cli', 'GPT-5 reasoning', 'OpenAI reasoning'); a UserPromptSubmit hook deterministically nudges the codex skill to load whenever a prompt mentions codex. Supports intelligent model selection, session continuation, and safe defaults."
-    },
     {
       "name": "gemini",
       "source": "./plugins/gemini",
@@ -25,11 +20,6 @@
       "name": "telegram-notifier",
       "source": "./plugins/telegram-notifier",
       "description": "Telegram bridge for Claude Code: notification hooks plus on-demand artifact sending via the telegram skill. Triggers: 'use asun:telegram to send', 'telegram this file'. Supports images, video, audio, documents, voice notes, animations, stickers, and text. Configurable via environment variables with dry-run mode."
-    },
-    {
-      "name": "tmux",
-      "source": "./plugins/tmux",
-      "description": "Canonical, reusable guide for one agent (Claude) to drive and observe other interactive agent CLIs inside tmux. Covers session/window/pane model, agent identity and naming, send/capture/idle-detection, sync and locking, and lifecycle/cleanup. Referenced by the codex plugin for generic tmux orchestration."
     }
   ]
 }

@@ -10,48 +10,13 @@ This marketplace provides Claude Code plugins for enhanced development capabilit
 
 | Plugin | Description | Type |
 |--------|-------------|------|
-| [Codex](#codex-plugin) | OpenAI GPT-5.6 series integration for frontier reasoning tasks | Skill |
 | [Gemini](#gemini-plugin) | Google Gemini 3.1 Pro AI integration for research and reasoning | Skill |
 | [Nano Banana](#nano-banana-plugin) | Standalone image generation via MCP (no Gemini CLI needed) | MCP + Skill |
 | [Telegram Notifier](#telegram-notifier-plugin) | Telegram notifications for Claude Code events | Hooks |
-| [tmux](#tmux-plugin) | Agent-CLI orchestration in tmux — canonical tmux know-how that codex references | Skill |
 
----
-
-### Codex Plugin
-
-Frontier AI assistant through OpenAI Codex CLI (GPT-5.6 series) integration.
-
-**Core Features:**
-- **GPT-5.6 series**: `gpt-5.6-sol` (frontier, default), `gpt-5.6-terra` (balanced), `gpt-5.6-luna` (fast) — pick model + effort per task
-- **Extended effort ladder**: low · medium · high · xhigh · **max** · **ultra** (5.6 adds `max`/`ultra`; default `xhigh`); override via `CC_CODEX_MODEL` / `CC_CODEX_EFFORT`
-- **Code Review**: delegate `codex review` over uncommitted changes, a base branch, or a commit
-- **Session Continuation**: Resume previous conversations with `codex exec resume --last`
-- **Safe Sandbox Defaults**: Read-only by default, workspace-write for code editing
-- **Codex Beside Claude**: By default spawns/reuses one codex instance as a **pane in your current tmux window** (visible next to Claude, no separate attach); falls back to one dedicated reusable window (`codex-<claude6>`) when Claude isn't running inside tmux. Supports multi-pane orchestration — detect all your codex panes (`panes`), spawn extra topic-named panes in the current window (`pane --topic`), and drive them independently. Generic tmux orchestration lives in the [tmux plugin](#tmux-plugin), which codex now formally depends on (auto-installed with codex).
-
-**Quick Start:**
-```bash
-# Install (npm or Homebrew — both are officially recommended)
-npm install -g @openai/codex
-# or: brew install --cask codex
-
-codex --version  # Requires v0.144.0+ for the GPT-5.6 series
-codex login
-```
-
-**Usage:**
-```
-> Use Codex to design a binary search tree in Rust
-```
-
-| Info | Value |
-|------|-------|
-| Path | [`plugins/codex/`](plugins/codex/) |
-| Version | 3.7.1 |
-| Models | GPT-5.6-Sol / Terra / Luna (GPT-5.5 fallback) |
-
-**Full Documentation**: [Codex Plugin README](plugins/codex/README.md)
+> **Moved (v3.0.0):** the `codex` and `tmux` plugins migrated to the
+> [super-tmux marketplace](https://github.com/Lucklyric/tmux-agent) as the
+> `tmux-agent` and `tmux-core` plugins — see [Migration](#migration-codex--tmux--super-tmux).
 
 ---
 
@@ -160,31 +125,23 @@ export CC_TELEGRAM_CHAT_ID="your-chat-id"
 
 ---
 
-### tmux Plugin
+## Migration: codex + tmux → super-tmux
 
-Canonical, reusable guide for one agent (Claude) to drive and observe *other* interactive agent CLIs inside tmux. This is the single source of generic tmux know-how that the [Codex plugin](#codex-plugin) references instead of re-teaching it.
+As of marketplace **3.0.0** the `codex` and `tmux` plugins live in the
+[super-tmux marketplace](https://github.com/Lucklyric/tmux-agent) (engine + kind
+profiles + layered skills, both plugins at 1.0.0). One-time reinstall per machine:
 
-**Core Features:**
-- **Agent Identity & Naming**: Stable per-session identity (`claude6`) with window naming and binding/reuse patterns
-- **Session/Window/Pane Model**: How to spawn, find, and target windows for an agent CLI
-- **Send & Capture**: Send inline or via tmpfile, two-phase idle detection, incremental capture and delta extraction
-- **Sync & Lifecycle**: One-driver discipline, `flock` serialization, spawn/find/kill/cleanup, orphan and dead-window detection
-- **Per-CLI Calibration**: Guidance for codex, gemini, aider, and generic REPLs; codex is the reference implementation
-
-**Usage:**
-```
-> Drive the aider CLI in tmux and capture its output once it goes idle
-> Orchestrate an interactive agent CLI inside a reusable tmux window
+```bash
+/plugin uninstall codex
+/plugin uninstall tmux
+/plugin marketplace add Lucklyric/tmux-agent
+/plugin install tmux-agent@super-tmux   # tmux-core auto-installs as a dependency
 ```
 
-| Info | Value |
-|------|-------|
-| Path | [`plugins/tmux/`](plugins/tmux/) |
-| Version | 0.1.0 |
-| Skills | tmux (agent-CLI orchestration) |
-| Type | Skill only (no hooks or agents) |
-
-**Full Documentation**: [tmux Plugin README](plugins/tmux/README.md)
+Everything is preserved: the codex command surface (`codex-tmux.sh`, all verbs, exit
+codes, `CC_CODEX_*` env vars), pane markers (existing panes are found by the new
+install), and the skills (now loading as `tmux-agent:codex` etc.). The last
+cc-dev-tools release carrying the plugins is tagged `codex-v3.11.0`.
 
 ---
 
@@ -197,17 +154,14 @@ Canonical, reusable guide for one agent (Claude) to drive and observe *other* in
 
 ### Step 2: Install plugins
 ```bash
-# Install Codex plugin
-/plugin install codex@cc-dev-tools
-
 # Install Gemini plugin
 /plugin install gemini@cc-dev-tools
 
+# Install Nano Banana plugin
+/plugin install nanobanana@cc-dev-tools
+
 # Install Telegram Notifier plugin
 /plugin install telegram-notifier@cc-dev-tools
-
-# Install tmux plugin
-/plugin install tmux@cc-dev-tools
 ```
 
 ### Step 3: Restart Claude Code
@@ -221,14 +175,6 @@ cc-dev-tools/                          # Marketplace root
 ├── README.md                          # This file
 ├── LICENSE                            # Apache 2.0
 └── plugins/
-    ├── codex/                         # Codex CLI integration
-    │   ├── .claude-plugin/
-    │   │   └── plugin.json
-    │   ├── README.md
-    │   └── skills/codex/
-    │       ├── SKILL.md
-    │       └── references/
-    │
     ├── gemini/                        # Gemini CLI integration
     │   ├── .claude-plugin/
     │   │   └── plugin.json
@@ -248,20 +194,12 @@ cc-dev-tools/                          # Marketplace root
     │       ├── SKILL.md
     │       └── references/
     │
-    ├── telegram-notifier/             # Telegram notifications
-    │   ├── .claude-plugin/
-    │   │   └── plugin.json
-    │   ├── hooks/
-    │   │   └── hooks.json             # Stop, SubagentStop, Notification hooks
-    │   └── README.md
-    │
-    └── tmux/                          # Agent-CLI orchestration in tmux
+    └── telegram-notifier/             # Telegram notifications
         ├── .claude-plugin/
         │   └── plugin.json
-        ├── README.md
-        └── skills/tmux/               # Canonical tmux orchestration skill
-            ├── SKILL.md
-            └── references/
+        ├── hooks/
+        │   └── hooks.json             # Stop, SubagentStop, Notification hooks
+        └── README.md
 ```
 
 ## How It Works
@@ -269,9 +207,9 @@ cc-dev-tools/                          # Marketplace root
 **Three-tier hierarchy**: Marketplace → Plugin → Components (Skills/Hooks)
 
 1. You add the **marketplace** (`cc-dev-tools`) from GitHub
-2. You install a **plugin** (e.g., `codex`, `gemini`, or `telegram-notifier`)
+2. You install a **plugin** (e.g., `gemini`, `nanobanana`, or `telegram-notifier`)
 3. The plugin provides **components**:
-   - **Skills**: Invoked by Claude when triggered (codex, gemini, tmux)
+   - **Skills**: Invoked by Claude when triggered (gemini, nanobanana)
    - **Hooks**: Event-driven automation (telegram-notifier)
 
 ## Migration from cc-skill-codex
@@ -295,15 +233,13 @@ Apache 2.0
 
 ## Version
 
-**Marketplace**: 2.31.1
+**Marketplace**: 3.0.0
 
 | Plugin | Version |
 |--------|---------|
-| Codex | 3.7.1 |
 | Gemini | 2.1.0 |
 | Nano Banana | 1.4.0 |
 | Telegram Notifier | 0.4.0 |
-| tmux | 0.1.0 |
 
 ## Links
 
