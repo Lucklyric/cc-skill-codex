@@ -1,7 +1,7 @@
 {
   "name": "tmux",
   "description": "Canonical guide for one agent (Claude) to drive and observe OTHER interactive CLIs inside tmux. Triggers: 'drive codex/gemini/aider in tmux', 'spawn/reuse a tmux session/window/pane', 'send-keys to a CLI', 'capture-pane output', 'detect when the CLI is idle/done', 'orchestrate an agent CLI'. Reference implementation other plugins (codex) link to.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": {
     "name": "0xasun"
   },

@@ -262,11 +262,12 @@ Spawn/find/kill, orphan/dead detection, and `remain-on-exit` details:
 
 The loop above is identical across agent CLIs; only the **idle signal** and a few keys differ:
 
-- **codex** — idle/status line matches `gpt-5\.5.*·` (the middot before the cwd path in
-  `gpt-5.5 xhigh · /path`); `Esc` cancels. Anchor to the ` · /path` status line, not just the
-  model name, because the model name can appear in response text. The codex plugin is the
-  **reference implementation**: it adds a `bind` lifecycle command, sandbox/approval flags, and
-  hooks-review handling on top of this skill.
+- **codex** — idle/status line matches `gpt-5\.[0-9].*·` (model-agnostic across the 5.x slugs;
+  the middot before the cwd path in `gpt-5.6-sol xhigh · /path`); `Esc` cancels. Anchor to the
+  ` · /path` status line, not just the model name, because the model name can appear in response
+  text. The codex plugin is the **reference implementation**: it adds `pane` (default) / `bind`
+  (fallback) lifecycle commands, sandbox/approval flags, and hooks-review handling on top of
+  this skill.
 - **gemini** — calibrate `IDLE_REGEX` to the gemini prompt/status line; otherwise the same loop.
 - **aider** — calibrate to its `>` prompt; same send/capture/idle pattern.
 - **any REPL** — pick a regex that matches the input-ready prompt and reuse the loop.

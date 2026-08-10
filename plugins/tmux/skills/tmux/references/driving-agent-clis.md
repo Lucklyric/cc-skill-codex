@@ -35,7 +35,7 @@ Values below are starting points — **always re-verify against your installed v
 
 | CLI | `IDLE_REGEX` (starting point) | Idle marker location | First-run / auth gate | Spawn notes |
 |---|---|---|---|---|
-| **codex** | `gpt-5\.5.*·` (the middot before the cwd path; anchor to the ` · /path` status line, not just the model name — the model name can appear in response text) | Bottom status line `gpt-5.5 xhigh · /path` | "Hooks need review" on first run → send `2` Enter ("Trust all and continue"). Auth: `codex login` if "Not authenticated". | Non-interactive bash must use the tmux TUI (not bare `codex`); sandbox via `-s read-only` / `-s workspace-write`; reasoning effort via `-c model_reasoning_effort=xhigh`. File-include: `@path`. |
+| **codex** | `gpt-5\.[0-9].*·` (model-agnostic across the 5.x slugs; the middot before the cwd path; anchor to the ` · /path` status line, not just the model name — the model name can appear in response text) | Bottom status line `gpt-5.6-sol xhigh · /path` | "Hooks need review" on first run → send `2` Enter ("Trust all and continue"). Auth: `codex login` if "Not authenticated". | Non-interactive bash must use the tmux TUI (not bare `codex`); sandbox via `-s read-only` / `-s workspace-write`; reasoning effort via `-c model_reasoning_effort=xhigh`. File-include: `@path`. |
 | **gemini** | `gemini-[0-9.]+.*(pro\|flash)` (verify) | Bottom model/status line | Google account auth on first run ("Sign in") → can't self-recover; user authenticates in their terminal. | Confirm a non-interactive-safe launch mode; file-include syntax differs by version — verify before relying on `@`. |
 | **aider** | `^>\s*$` or the `aider>` prompt at column 0 | Shell-style input prompt | API-key check on first run ("set OPENAI_API_KEY"/provider key) → user exports the key, then respawn. | Pass the model with `--model`; `--yes`/auto-confirm flags reduce approval prompts. No `@` include — give the path and say "add this file". |
 | **generic REPL** | The REPL's prompt string, e.g. `>>> `, `In \[[0-9]+\]:`, `\$ ` | The last non-empty line (the prompt) | Usually none; some require an explicit "ready"/banner wait. | Launch the REPL as the window command; `send-inline` works directly; for multi-line input prefer `send-via-tmpfile` + a "read this file" instruction. |
@@ -58,9 +58,9 @@ If a CLI has *no* stable idle marker (it leaves the cursor on a blank line), fal
 
 What codex contributes on top of this generic skill:
 
-- **A lifecycle helper script** — `plugins/codex/scripts/codex-tmux.sh` — implementing spawn/find/reuse/kill, the idempotent **bind** of a single window per agent session (`codex-<claude6>`), `remain-on-exit`, metadata recording, and orphan/dead detection. It is the concrete form of the pseudo-functions (`window_state`, `claude6`, etc.) shown in `sync-and-lifecycle.md` and `model-and-identity.md`.
-- **codex-specific calibration** — the `gpt-5.5` `IDLE_REGEX`, hooks-review handling, sandbox/approval flag mapping, and model/effort defaults.
-- **A `codex exec` escape hatch** for genuine one-shots that don't need a tmux window.
+- **A lifecycle helper script** — `plugins/codex/scripts/codex-tmux.sh` — implementing spawn/find/reuse/kill, the idempotent **`pane`** (default: reused pane in the agent's current window, keep-shell) and **`bind`** (fallback: single window per agent session, `codex-<claude6>`) entry points, `remain-on-exit`, metadata recording, and orphan/dead detection. It is the concrete form of the pseudo-functions (`window_state`, `claude6`, etc.) shown in `sync-and-lifecycle.md` and `model-and-identity.md`.
+- **codex-specific calibration** — the model-agnostic `gpt-5\.[0-9].*·` `IDLE_REGEX`, hooks-review handling, sandbox/approval flag mapping, and model/effort defaults.
+- **A `codex exec` escape hatch** (confirm-gated) for genuine one-shots that don't need a tmux window.
 
 When building support for a **new** CLI, mirror the codex plugin's structure: a thin lifecycle script (management only) plus a skill that defers all interaction theory to *this* tmux skill and adds only the four per-CLI knobs above. Don't re-teach `send-keys`/`capture-pane`/idle-detection — point at `interaction-recipes.md` and `sync-and-lifecycle.md`, exactly as the codex plugin does.
 
